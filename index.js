@@ -17,6 +17,7 @@ if (!fs.existsSync(sessionsDir)) {
 
 // User tracking
 const userSessions = new Map();
+const activeSockets = new Map();
 
 // Helper: Format country code detection
 function detectCountry(phoneNumber) {
@@ -50,12 +51,6 @@ function validatePhoneNumber(phoneNumber) {
   return phoneRegex.test(phoneNumber);
 }
 
-// Helper: Generate random pairing code
-function generatePairingCode() {
-  const randomCode = Math.random().toString(36).substring(2, 10).toUpperCase();
-  return `SIMO-${randomCode.substring(0, 4)}`;
-}
-
 // Start command
 bot.onText(/\/start/, (msg) => {
   const chatId = msg.chat.id;
@@ -66,18 +61,14 @@ bot.onText(/\/start/, (msg) => {
 ║    WhatsApp Linking Process          ║
 ╚══════════════════════════════════════╝
 
-❌ ɪɴᴠᴀʟɪᴅ ғᴏʀᴍᴀᴛ!
-
-Please use format: +1234567890
-
 📱 WhatsApp Linking Process
 
 1️⃣ Send your WhatsApp phone number (with country code)
    Example: +1234567890
 
-2️⃣ You'll receive an 8-digit linking code
+2️⃣ You'll receive a REAL 8-digit linking code from WhatsApp
 
-3️⃣ Enter that code in WhatsApp Linked Devices
+3️⃣ Enter that code in WhatsApp → Linked Devices
 
 4️⃣ Done! Your WhatsApp is now linked.
 
@@ -114,23 +105,11 @@ Example formats:
   }
 
   try {
-    // Store user session
-    if (!userSessions.has(chatId)) {
-      userSessions.set(chatId, {
-        phoneNumber: text,
-        country: detectCountry(text),
-        pairingCode: generatePairingCode(),
-        status: 'connecting',
-      });
-    }
+    // Show loading message
+    await bot.sendMessage(chatId, '⏳ Requesting pairing code from WhatsApp...');
 
-    const userSession = userSessions.get(chatId);
-    userSession.phoneNumber = text;
-    userSession.country = detectCountry(text);
-    userSession.pairingCode = generatePairingCode();
-
-    // Generate WhatsApp session
-    await generateWhatsAppSession(text, chatId);
+    // Generate real WhatsApp pairing code
+    await generateWhatsAppPairingCode(text, chatId);
 
   } catch (error) {
     console.error('Error:', error);
@@ -145,58 +124,85 @@ Please try again with a valid phone number.
   }
 });
 
-// Generate WhatsApp Session
-async function generateWhatsAppSession(phoneNumber, chatId) {
+// Generate REAL WhatsApp Pairing Code
+async function generateWhatsAppPairingCode(phoneNumber, chatId) {
   try {
     const sessionName = `SIMON_${Date.now()}`;
-    const { state, saveCreds } = await useMultiFileAuthState(
-      path.join(sessionsDir, sessionName)
-    );
+    const sessionPath = path.join(sessionsDir, sessionName);
+    
+    const { state, saveCreds } = await useMultiFileAuthState(sessionPath);
 
     const sock = makeWASocket({
       auth: state,
       printQRInTerminal: false,
       browser: ['SIMON TECH BOT2', 'Windows', '1.0'],
+      qrTimeout: 60000,
+      logger: {
+        level: 'error',
+        log: () => {},
+      },
     });
 
-    sock.ev.on('connection.update', async (update) => {
-      const { connection, lastDisconnect } = update;
+    // Store socket reference
+    activeSockets.set(chatId, sock);
 
-      if (connection === 'open') {
-        console.log(`✅ WhatsApp connected for ${phoneNumber}`);
+    // Wait for connection to initialize
+    await new Promise((resolve) => {
+      setTimeout(resolve, 2000);
+    });
 
-        const userSession = userSessions.get(chatId);
+    // Request REAL pairing code from WhatsApp
+    try {
+      const code = await sock.requestPairingCode(phoneNumber);
 
-        // Display formatted response
+      if (code) {
+        // Store session info
+        const userSession = {
+          phoneNumber,
+          country: detectCountry(phoneNumber),
+          pairingCode: code, // REAL code from WhatsApp
+          status: 'code_generated',
+          sessionName,
+        };
+        
+        userSessions.set(chatId, userSession);
+
+        // Display the REAL pairing code
         const responseMessage = `
 ╰┈➤ ɢᴇɴᴇʀᴀᴛɪɴɢ ᴘᴀɪʀ ᴄᴏᴅᴇ 👀
 
 [ ♡ SIMON TECH BOT2 👀 ]
 
-╰┈➤ ɴᴜᴍʙᴇʀ : ${userSession.phoneNumber}
+╰┈➤ ɴᴜᴍʙᴇʀ : ${phoneNumber}
 
 ╰┈➤ ᴄᴏᴜɴᴛʀʏ : ${userSession.country}
 
-╰┈➤ ᴄᴏᴅᴇ : ${userSession.pairingCode}
+╰┈➤ ᴄᴏᴅᴇ : ${code}
 
 [ Sᴇssɪᴏɴ Cᴏɴɴᴇᴄᴛɪɴɢ. ❤️‍🩹 ]
 
 ⏳ Waiting for WhatsApp linking confirmation...
 
 💡 Steps:
-1️⃣ Go to WhatsApp → Linked Devices
-2️⃣ Click "Link a Device"
-3️⃣ Enter the pairing code: ${userSession.pairingCode}
-4️⃣ Confirm on your phone
+1️⃣ Go to WhatsApp on your phone
+2️⃣ Go to Settings → Linked Devices
+3️⃣ Click "Link a Device"
+4️⃣ Enter the pairing code: ${code}
+5️⃣ Confirm on your phone
 
 ⚠️ This code expires in 60 seconds
 `;
 
         await bot.sendMessage(chatId, responseMessage);
 
-        // After connection
-        setTimeout(async () => {
-          const successMsg = `
+        // Listen for connection
+        sock.ev.on('connection.update', async (update) => {
+          const { connection } = update;
+
+          if (connection === 'open') {
+            console.log(`✅ WhatsApp connected for ${phoneNumber}`);
+
+            const successMsg = `
 ✅ ᴄᴏɴɴᴇᴄᴛɪᴏɴ sᴜᴄᴄᴇssғᴜʟ!
 
 [ ♡ SIMON TECH BOT2 👀 ]
@@ -215,35 +221,67 @@ async function generateWhatsAppSession(phoneNumber, chatId) {
 3️⃣ Type /help for more information
 `;
 
-          await bot.sendMessage(chatId, successMsg);
+            await bot.sendMessage(chatId, successMsg);
 
-          if (userSessions.has(chatId)) {
             const session = userSessions.get(chatId);
+            if (session) {
+              session.status = 'connected';
+            }
+
+            // Close the socket after connection
+            setTimeout(() => {
+              sock.end(new Error('Closed'));
+              activeSockets.delete(chatId);
+            }, 5000);
+          }
+        });
+
+        sock.ev.on('creds.update', saveCreds);
+
+      } else {
+        await bot.sendMessage(chatId, '❌ Failed to generate pairing code. Please try again.');
+      }
+
+    } catch (pairingError) {
+      console.error('Pairing error:', pairingError);
+      
+      // Try QR code as fallback
+      sock.ev.on('connection.update', async (update) => {
+        const { qr, connection } = update;
+
+        if (qr) {
+          console.log('Fallback: QR Code generated');
+          await bot.sendMessage(
+            chatId,
+            '❌ Could not generate phone pairing code.\n\n⚠️ Alternative: Please use the web session generator at:\nhttps://your-deployment-url.com\n\nThen scan the QR code with WhatsApp camera.'
+          );
+        }
+
+        if (connection === 'open') {
+          const session = userSessions.get(chatId);
+          if (session) {
             session.status = 'connected';
           }
-        }, 3000);
-      }
 
-      if (connection === 'close') {
-        const shouldReconnect =
-          lastDisconnect?.error?.output?.statusCode !== DisconnectReason.loggedOut;
+          await bot.sendMessage(chatId, '✅ WhatsApp connected via QR code!');
 
-        if (!shouldReconnect) {
-          const logoutMsg = `
-❌ Session logged out
-
-Please restart the linking process with /start
-`;
-          await bot.sendMessage(chatId, logoutMsg);
+          setTimeout(() => {
+            sock.end(new Error('Closed'));
+            activeSockets.delete(chatId);
+          }, 5000);
         }
-      }
-    });
+      });
+    }
 
     sock.ev.on('creds.update', saveCreds);
 
   } catch (error) {
     console.error('WhatsApp session error:', error);
-    throw error;
+    
+    await bot.sendMessage(
+      chatId,
+      `❌ Error: ${error.message}\n\nPlease ensure:\n• Your phone number is correct\n• WhatsApp is installed and updated\n• Your phone is connected to the internet`
+    );
   }
 }
 
@@ -266,15 +304,16 @@ bot.onText(/\/help/, (msg) => {
 
 1️⃣ Send /start
 2️⃣ Reply with your phone number (+1234567890)
-3️⃣ You'll get a pairing code
-4️⃣ Enter the code in WhatsApp Linked Devices
+3️⃣ You'll get a REAL 8-digit pairing code
+4️⃣ Enter it in WhatsApp Linked Devices
 5️⃣ Connection confirmed!
 
 ⚠️ Important:
 • Phone number must include country code
 • Pairing code expires after 60 seconds
+• Code is generated by WhatsApp servers
 • Your account will be automatically linked
-• Never share your phone number with anyone
+• Never share your phone number
 
 🆘 Need help?
 Contact: @simontech_official
@@ -299,6 +338,8 @@ bot.onText(/\/status/, (msg) => {
 ╰┈➤ sᴛᴀᴛᴜs : ${session.status === 'connected' ? '✅ Connected' : '⏳ Connecting...'}
 
 ╰┈➤ ᴄᴏᴜɴᴛʀʏ : ${session.country || 'Unknown'}
+
+${session.pairingCode ? `╰┈➤ ᴄᴏᴅᴇ : ${session.pairingCode}` : ''}
 `;
 
     bot.sendMessage(chatId, statusMessage);
@@ -315,6 +356,14 @@ Start with /start to begin linking your WhatsApp account.
 // Reset command
 bot.onText(/\/reset/, (msg) => {
   const chatId = msg.chat.id;
+  
+  // Close active socket
+  if (activeSockets.has(chatId)) {
+    const sock = activeSockets.get(chatId);
+    sock.end(new Error('Reset'));
+    activeSockets.delete(chatId);
+  }
+  
   userSessions.delete(chatId);
 
   const resetMsg = `
@@ -329,6 +378,15 @@ Use /start to begin a new linking process.
 // Error handling
 bot.on('polling_error', (error) => {
   console.error('Polling error:', error);
+});
+
+// Graceful shutdown
+process.on('SIGINT', () => {
+  console.log('\n🛑 Shutting down...');
+  activeSockets.forEach((sock) => {
+    sock.end(new Error('Shutdown'));
+  });
+  process.exit(0);
 });
 
 // Server startup
