@@ -5,7 +5,6 @@ const fs = require('fs');
 
 // Bot Configuration
 const TELEGRAM_TOKEN = process.env.TELEGRAM_TOKEN || 'YOUR_TELEGRAM_BOT_TOKEN';
-const SESSION_ID = process.env.SESSION_ID || '';
 
 // Initialize Telegram Bot
 const bot = new TelegramBot(TELEGRAM_TOKEN, { polling: true });
@@ -57,21 +56,15 @@ function generatePairingCode() {
   return `SIMO-${randomCode.substring(0, 4)}`;
 }
 
-// Helper: Format message with fancy text
-function formatMessage(content) {
-  return content;
-}
-
 // Start command
 bot.onText(/\/start/, (msg) => {
   const chatId = msg.chat.id;
-  const firstName = msg.from.first_name;
 
   const startMessage = `
 ╔══════════════════════════════════════╗
 ║   ♡ SIMON TECH BOT2 👀              ║
 ║    WhatsApp Linking Process          ║
-╚════════════════��═════════════════════╝
+╚══════════════════════════════════════╝
 
 ❌ ɪɴᴠᴀʟɪᴅ ғᴏʀᴍᴀᴛ!
 
@@ -139,33 +132,6 @@ Example formats:
     // Generate WhatsApp session
     await generateWhatsAppSession(text, chatId);
 
-    // Display formatted response
-    const responseMessage = `
-╰┈➤ ɢᴇɴᴇʀᴀᴛɪɴɢ ᴘᴀɪʀ ᴄᴏᴅᴇ 👀
-
-[ ♡ SIMON TECH BOT2 👀 ]
-
-╰┈➤ ɴᴜᴍʙᴇʀ : ${userSession.phoneNumber}
-
-╰┈➤ ᴄᴏᴜɴᴛʀʏ : ${userSession.country}
-
-╰┈➤ ᴄᴏᴅᴇ : ${userSession.pairingCode}
-
-[ Sᴇssɪᴏɴ Cᴏɴɴᴇᴄᴛɪɴɢ. ❤️‍🩹 ]
-
-⏳ Waiting for WhatsApp linking confirmation...
-
-💡 Steps:
-1️⃣ Go to WhatsApp → Linked Devices
-2️⃣ Click "Link a Device"
-3️⃣ Enter the pairing code: ${userSession.pairingCode}
-4️⃣ Confirm on your phone
-
-⚠️ This code expires in 60 seconds
-`;
-
-    await bot.sendMessage(chatId, responseMessage);
-
   } catch (error) {
     console.error('Error:', error);
     const errorMsg = `
@@ -199,14 +165,38 @@ async function generateWhatsAppSession(phoneNumber, chatId) {
       if (connection === 'open') {
         console.log(`✅ WhatsApp connected for ${phoneNumber}`);
 
-        // Get session credentials
-        const credentialsPath = path.join(sessionsDir, sessionName, 'creds.json');
-        if (fs.existsSync(credentialsPath)) {
-          try {
-            const credentials = JSON.stringify(require(credentialsPath));
-            const encodedSession = Buffer.from(credentials).toString('base64');
+        const userSession = userSessions.get(chatId);
 
-            const successMsg = `
+        // Display formatted response
+        const responseMessage = `
+╰┈➤ ɢᴇɴᴇʀᴀᴛɪɴɢ ᴘᴀɪʀ ᴄᴏᴅᴇ 👀
+
+[ ♡ SIMON TECH BOT2 👀 ]
+
+╰┈➤ ɴᴜᴍʙᴇʀ : ${userSession.phoneNumber}
+
+╰┈➤ ᴄᴏᴜɴᴛʀʏ : ${userSession.country}
+
+╰┈➤ ᴄᴏᴅᴇ : ${userSession.pairingCode}
+
+[ Sᴇssɪᴏɴ Cᴏɴɴᴇᴄᴛɪɴɢ. ❤️‍🩹 ]
+
+⏳ Waiting for WhatsApp linking confirmation...
+
+💡 Steps:
+1️⃣ Go to WhatsApp → Linked Devices
+2️⃣ Click "Link a Device"
+3️⃣ Enter the pairing code: ${userSession.pairingCode}
+4️⃣ Confirm on your phone
+
+⚠️ This code expires in 60 seconds
+`;
+
+        await bot.sendMessage(chatId, responseMessage);
+
+        // After connection
+        setTimeout(async () => {
+          const successMsg = `
 ✅ ᴄᴏɴɴᴇᴄᴛɪᴏɴ sᴜᴄᴄᴇssғᴜʟ!
 
 [ ♡ SIMON TECH BOT2 👀 ]
@@ -215,36 +205,23 @@ async function generateWhatsAppSession(phoneNumber, chatId) {
 
 ╰┈➤ sᴛᴀᴛᴜs : ✅ Connected
 
-🔐 Your SESSION_ID:
+✅ Your WhatsApp account is now linked!
 
-\`\`\`
-${encodedSession}
-\`\`\`
-
-💾 Save this SESSION_ID securely!
-
-⚠️ Do NOT share this with anyone!
+🎉 Bot is ready to use!
 
 📝 Next steps:
-1️⃣ Copy the SESSION_ID
-2️⃣ Use it in your bot configuration
-3️⃣ Keep it safe & secret
-
-✅ Your bot is ready to use!
+1️⃣ Your bot is configured and running
+2️⃣ Start using WhatsApp commands
+3️⃣ Type /help for more information
 `;
 
-            await bot.sendMessage(chatId, successMsg);
+          await bot.sendMessage(chatId, successMsg);
 
-            // Update user session
-            if (userSessions.has(chatId)) {
-              const session = userSessions.get(chatId);
-              session.status = 'connected';
-              session.sessionId = encodedSession.substring(0, 50) + '...';
-            }
-          } catch (err) {
-            console.error('Error reading credentials:', err);
+          if (userSessions.has(chatId)) {
+            const session = userSessions.get(chatId);
+            session.status = 'connected';
           }
-        }
+        }, 3000);
       }
 
       if (connection === 'close') {
@@ -291,13 +268,13 @@ bot.onText(/\/help/, (msg) => {
 2️⃣ Reply with your phone number (+1234567890)
 3️⃣ You'll get a pairing code
 4️⃣ Enter the code in WhatsApp Linked Devices
-5️⃣ Get your SESSION_ID
+5️⃣ Connection confirmed!
 
 ⚠️ Important:
 • Phone number must include country code
-• Session expires after 60 seconds
-• Save your SESSION_ID securely
-• Never share your SESSION_ID
+• Pairing code expires after 60 seconds
+• Your account will be automatically linked
+• Never share your phone number with anyone
 
 🆘 Need help?
 Contact: @simontech_official
@@ -322,8 +299,6 @@ bot.onText(/\/status/, (msg) => {
 ╰┈➤ sᴛᴀᴛᴜs : ${session.status === 'connected' ? '✅ Connected' : '⏳ Connecting...'}
 
 ╰┈➤ ᴄᴏᴜɴᴛʀʏ : ${session.country || 'Unknown'}
-
-${session.sessionId ? `✅ Session ID generated (use it in your bot config)` : '⏳ Waiting for connection...'}
 `;
 
     bot.sendMessage(chatId, statusMessage);
