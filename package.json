@@ -1,0 +1,28 @@
+{
+  "name": "simon-tech-bot2",
+  "version": "2.0.0",
+  "description": "Multi-feature Telegram and WhatsApp bot with 800+ commands",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "dev": "nodemon index.js"
+  },
+  "keywords": ["telegram", "whatsapp", "bot", "multi-device"],
+  "author": "SIMON TECH",
+  "license": "ISC",
+  "dependencies": {
+    "node-telegram-bot-api": "^0.65.0",
+    "@whiskeysockets/baileys": "^6.5.0"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.1"
+  },
+  "engines": {
+    "node": ">=16.0.0",
+    "npm": ">=7.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/logintiktok427-cmyk/SIMON-TECH-bot2.git"
+  }
+}
