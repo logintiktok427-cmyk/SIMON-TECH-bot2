@@ -2,6 +2,52 @@ const TelegramBot = require('node-telegram-bot-api');
 const { default: makeWASocket, useMultiFileAuthState, DisconnectReason } = require('@whiskeysockets/baileys');
 const path = require('path');
 const fs = require('fs');
+const express = require('express');
+const http = require('http');
+
+// Express HTTP Server for Railway Healthcheck
+const app = express();
+const PORT = process.env.PORT || 5000;
+
+// Middleware
+app.use(express.json());
+
+// Health check endpoint
+app.get('/', (req, res) => {
+  res.status(200).json({ status: 'OK', message: 'SIMON TECH BOT2 is running' });
+});
+
+// Status endpoint
+app.get('/status', (req, res) => {
+  res.status(200).json({ 
+    status: 'online', 
+    version: '2.0.0',
+    botName: 'SIMON TECH BOT2',
+    uptime: process.uptime()
+  });
+});
+
+// Health check endpoint (Railway specific)
+app.get('/health', (req, res) => {
+  res.status(200).json({ healthy: true });
+});
+
+// 404 handler
+app.use((req, res) => {
+  res.status(404).json({ error: 'Not Found' });
+});
+
+// Error handler
+app.use((err, req, res, next) => {
+  console.error('Express error:', err);
+  res.status(500).json({ error: 'Internal Server Error' });
+});
+
+// Start HTTP Server
+const server = http.createServer(app);
+server.listen(PORT, '0.0.0.0', () => {
+  console.log(`✅ HTTP Server running on port ${PORT}`);
+});
 
 // Bot Configuration
 const TELEGRAM_TOKEN = process.env.TELEGRAM_TOKEN || 'YOUR_TELEGRAM_BOT_TOKEN';
@@ -244,7 +290,7 @@ const MENUS = {
 ├⊷ .story - Generate story
 ├⊷ .poem - Generate poem
 ├⊷ .lyrics - Generate lyrics
-├⊷ .caption - Generate caption
+��⊷ .caption - Generate caption
 ├⊷ .emailai - Email generator
 ├⊷ .teacher - AI teacher
 ├⊷ .mathai - Math solver
@@ -363,7 +409,7 @@ const MENUS = {
 ├⊷ .goodbye - Set goodbye
 ├⊷ .antilink - Anti link
 ├⊷ .antispam - Anti spam
-��⊷ .antibot - Anti bot
+├⊷ .antibot - Anti bot
 ├⊷ .antifake - Anti fake
 ├⊷ .antidelete - Anti delete
 ├⊷ .antitoxic - Anti toxic
@@ -683,7 +729,7 @@ Available Categories:
 📥 Download | 🖼️ Media | 🎮 Games
 💰 Economy | 🏦 Bank | 🎭 Anime
 🔍 Search | 🛠️ Tools | 🌐 Internet
-🎨 Design | 📚 Education | ☁��� Cloud
+🎨 Design | 📚 Education | ☁️ Cloud
 🚀 Developer
 
 📊 TOTAL: 800+ Commands
@@ -718,7 +764,7 @@ Available Categories:
           console.log('Fallback: QR Code generated');
           await bot.sendMessage(
             chatId,
-            '❌ Could not generate phone pairing code.\n\n⚠️ Alternative: Please use the web session generator at:\nhttps://your-deployment-url.com\n\nThen scan the QR code with WhatsApp camera.'
+            '❌ Could not generate phone pairing code.\n\n⚠️ Alternative: Please use the web session generator.\n\nThen scan the QR code with WhatsApp camera'
           );
         }
 
@@ -810,7 +856,7 @@ bot.on('message', async (msg) => {
       const minutes = Math.floor((uptime % 3600) / 60);
       
       const aliveMsg = `
-╔═══════════════���════════════════════╗
+╔════════════════════════════════════╗
 ║   ♡ SIMON TECH BOT2 STATUS         ║
 ╚════════════════════════════════════╝
 
@@ -854,9 +900,9 @@ Type .menu to see all available commands!
 bot.onText(/\/help/, (msg) => {
   const chatId = msg.chat.id;
   const helpMessage = `
-╔═════════════════════���════════════════╗
-║   ♡ SIMON TECH BOT2 - HELP          ║
-╚══════════════════════════════════════╝
+╔════════════════════════════════════╗
+║   ♡ SIMON TECH BOT2 - HELP         ║
+╚════════════════════════════════════╝
 
 📚 Available Commands:
 
@@ -960,10 +1006,14 @@ process.on('SIGINT', () => {
   activeWABots.forEach((sock) => {
     sock.end(new Error('Shutdown'));
   });
-  process.exit(0);
+  server.close(() => {
+    console.log('HTTP server closed');
+    process.exit(0);
+  });
 });
 
-// Server startup
+// Bot startup
 console.log('✅ SIMON TECH BOT2 - Telegram Interface Started');
 console.log('🤖 Bot is running and waiting for messages...');
 console.log('📱 Make sure TELEGRAM_TOKEN is set in environment variables');
+console.log(`🌐 HTTP Server available at port ${PORT}`);
